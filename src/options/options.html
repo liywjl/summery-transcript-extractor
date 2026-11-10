@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Summery settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="options">
+      <header class="options-head">
+        <h1>Summery settings</h1>
+        <span class="saved" id="saved" aria-live="polite"></span>
+      </header>
+
+      <section class="field">
+        <div class="field-head">
+          <label for="template">Prompt</label>
+          <button class="reset" id="reset" type="button">Reset prompt</button>
+        </div>
+        <textarea id="template" rows="9" spellcheck="false"></textarea>
+        <p class="placeholders">
+          <code>{{source}}</code>
+          <code>{{title}}</code>
+          <code>{{url}}</code>
+          <code>{{content}}</code>
+        </p>
+      </section>
+
+      <section class="row">
+        <label class="field">
+          <span class="label">Open chat in</span>
+          <span class="select">
+            <select id="chat-site"></select>
+            <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </label>
+
+        <label class="toggle">
+          <input type="checkbox" id="timestamps" />
+          <span>Timestamps in transcripts</span>
+        </label>
+      </section>
+
+      <form class="field youtube" id="youtube">
+        <div class="field-head">
+          <label for="app-version">YouTube app version</label>
+          <span class="health" id="health"></span>
+        </div>
+        <div class="version-row">
+          <input id="app-version" type="text" autocomplete="off" spellcheck="false" />
+          <button class="primary" id="test-version" type="submit">Test and save</button>
+          <button class="secondary" id="reset-version" type="button">Use built-in</button>
+        </div>
+        <p class="version-result" id="version-result" aria-live="polite"></p>
+        <a class="external" id="latest-version" target="_blank" rel="noreferrer">
+          Newest version number
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+        </a>
+      </form>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

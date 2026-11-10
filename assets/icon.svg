@@ -1,4 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#7c3aed"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="26" font-weight="600" fill="#ffffff">ST</text>
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb066"/>
+      <stop offset="1" stop-color="#e4602a"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#sun)"/>
+  <path d="M14 20h10M30 20h20M14 32h36M14 44h22" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M14 20h10" stroke="#2a1608" stroke-width="6" stroke-linecap="round" stroke-opacity="0.35"/>
 </svg>
