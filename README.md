@@ -2,6 +2,9 @@
 
 # Summery
 
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+<a href="https://buymeacoffee.com/willlacf"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support%20this%20project-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" /></a>
+
 Chrome extension that turns a YouTube video or any web page into a ready-to-paste chat prompt.
 
 - **YouTube**: full transcript with timestamps, channel, length and description.
@@ -82,3 +85,11 @@ YouTube has probably retired the app version Summery pretends to be. The popup t
 2. Paste it and press **Test and save**. It's only saved if a real test transcript comes back.
 
 A bad saved version can't break anything: Summery falls back to the built-in Android version, then the iPhone app. **Use built-in** undoes your change.
+
+## Support
+
+Issues and PRs welcome. If Summery is useful to you, you can [buy me a coffee](https://buymeacoffee.com/willlacf). ☕
+
+## License
+
+[MIT](LICENSE)
