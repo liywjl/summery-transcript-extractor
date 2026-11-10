@@ -22,7 +22,7 @@ function createTurndown(): TurndownService {
   });
 
   turndown.addRule("dropNonText", {
-    filter: ["script", "style", "noscript", "iframe", "img", "picture", "svg", "video", "audio", "button", "form"] as TurndownService.Filter,
+    filter: ["script", "style", "noscript", "iframe", "img", "picture", "figcaption", "svg", "video", "audio", "button", "form"] as TurndownService.Filter,
     replacement: () => "",
   });
 
