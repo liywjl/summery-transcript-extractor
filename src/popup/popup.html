@@ -7,25 +7,16 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <main class="popup" data-state="loading">
-      <header class="top">
-        <span class="kind" id="kind"></span>
-        <button class="icon-button" id="settings" type="button" aria-label="Settings" title="Settings"></button>
-      </header>
-
-      <section class="summary">
-        <h1 class="title" id="title"><span class="skeleton skeleton-title"></span></h1>
-        <p class="facts" id="facts"><span class="skeleton skeleton-facts"></span></p>
-      </section>
-
-      <section class="preview" id="preview" aria-live="polite"></section>
-
-      <footer class="actions">
-        <button class="primary" id="copy-prompt" type="button" disabled></button>
-        <button class="icon-button" id="copy-text" type="button" aria-label="Copy text only" title="Copy text only" disabled></button>
-        <button class="icon-button" id="download" type="button" aria-label="Download Markdown" title="Download Markdown" disabled></button>
-        <button class="icon-button" id="open-chat" type="button" disabled></button>
-      </footer>
+    <main class="popup">
+      <nav class="tabs">
+        <div class="tab-list" role="tablist" aria-label="Summery views">
+          <button class="tab" id="tab-page" type="button" role="tab" data-tab="page"></button>
+          <button class="tab" id="tab-picked" type="button" role="tab" data-tab="picked"></button>
+          <button class="tab" id="tab-saved" type="button" role="tab" data-tab="saved"></button>
+        </div>
+        <button class="icon-button is-small" id="settings" type="button" aria-label="Settings" title="Settings"></button>
+      </nav>
+      <section class="panel" id="panel" role="tabpanel"></section>
     </main>
     <script src="popup.js"></script>
   </body>

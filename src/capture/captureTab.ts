@@ -1,4 +1,7 @@
+import { cleanUrl } from "../links/cleanUrl";
 import type { PageExtract } from "../page/extractDocument";
+import type { ListingReading, PageReading } from "../page/PageReading";
+import type { ReadOptions } from "../page/readPage";
 import { loadSettings } from "../settings";
 import { fetchYouTubeTranscript, YouTubeRejected } from "../youtube/fetchYouTubeTranscript";
 import { findVideoId, watchUrl } from "../youtube/findVideoId";
@@ -9,8 +12,10 @@ import { recordYouTubeStatus } from "../youtube/youtubeStatus";
 import type { Capture, PageCapture, YouTubeCapture } from "./Capture";
 
 declare global {
-  var summeryExtractPage: (() => PageExtract) | undefined;
+  var summeryReadPage: ((options: ReadOptions) => PageReading) | undefined;
 }
+
+export type TabReading = { shape: "capture"; capture: Capture } | ListingReading;
 
 export class CaptureFailed extends Error {
   constructor(
@@ -91,30 +96,53 @@ export async function captureVideo(videoId: string, watchPageTabId?: number): Pr
   }
 }
 
-function pageCapture(extract: PageExtract): PageCapture {
+export function pageCapture(extract: PageExtract): PageCapture {
   return {
     kind: extract.isSelection ? "selection" : "article",
     title: extract.title,
-    url: extract.url,
+    url: cleanUrl(extract.url),
     siteName: extract.siteName,
     byline: extract.byline,
     markdown: extract.markdown,
   };
 }
 
-export async function capturePage(tabId: number): Promise<PageCapture> {
+async function readTab(tabId: number, options: ReadOptions): Promise<PageReading> {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["extract-page.js"] });
 
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => globalThis.summeryExtractPage?.(),
+      func: (readOptions: ReadOptions) => globalThis.summeryReadPage?.(readOptions),
+      args: [options],
     });
 
-    return pageCapture(injection.result as PageExtract);
+    return injection.result as PageReading;
   } catch {
     throw new CaptureFailed("Chrome doesn't let extensions read this page.");
   }
+}
+
+function tabReading(reading: PageReading): TabReading {
+  if (reading.shape === "listing") {
+    return reading;
+  }
+
+  return { shape: "capture", capture: pageCapture(reading.extract) };
+}
+
+export async function capturePage(tabId: number): Promise<PageCapture> {
+  const reading = await readTab(tabId, { isWholePage: true });
+
+  if (reading.shape === "listing") {
+    throw new CaptureFailed("Summery couldn't read this page as one document.");
+  }
+
+  return pageCapture(reading.extract);
+}
+
+export async function readPageInTab(tabId: number, options: ReadOptions = { isWholePage: false }): Promise<TabReading> {
+  return tabReading(await readTab(tabId, options));
 }
 
 export async function captureTab(tab: chrome.tabs.Tab): Promise<Capture> {

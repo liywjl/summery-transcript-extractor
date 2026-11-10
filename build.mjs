@@ -10,6 +10,7 @@ const scripts = {
     options: "src/options/options.ts",
     offscreen: "src/offscreen/offscreen.ts",
     "extract-page": "src/page/extractPageScript.ts",
+    "youtube-picker": "src/youtube/thumbnailPicker.ts",
   },
   bundle: true,
   format: "iife",
@@ -22,6 +23,7 @@ const styles = {
   entryPoints: {
     popup: "src/popup/popup.css",
     options: "src/options/options.css",
+    "youtube-picker": "src/youtube/thumbnailPicker.css",
   },
   bundle: true,
   outdir: "dist",
