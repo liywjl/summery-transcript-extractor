@@ -8,6 +8,12 @@ Chrome extension that turns a YouTube video or any web page into a ready-to-past
 - **Any page**: the main article text as Markdown, without menus, ads, images or link clutter.
 - **Selection**: select a passage first to copy only that.
 
+| YouTube talk | Web article |
+| --- | --- |
+| <img src="docs/popup-youtube.png" width="380" alt="Summery popup showing the timestamped transcript of a YouTube talk"> | <img src="docs/popup-article.png" width="380" alt="Summery popup showing the clean text of a Wikipedia article"> |
+
+<img src="docs/settings.png" width="760" alt="Summery settings: prompt template, chat site, timestamps and YouTube app version">
+
 ## Install
 
 ```sh

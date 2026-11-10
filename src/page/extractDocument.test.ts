@@ -15,7 +15,7 @@ const articlePage = `
         ${paragraph("Caches trade memory for latency.")}
         <h2>Invalidation</h2>
         ${paragraph("Invalidation is the hard part.")}
-        <img src="diagram.png" alt="diagram">
+        <figure><img src="diagram.png" alt="diagram"><figcaption>Diagram of a cache</figcaption></figure>
         <pre><code>cache.delete(key)</code></pre>
         ${paragraph("Read <a href=\"https://example.com/more\">the follow-up</a> for numbers.")}
       </article>
@@ -36,8 +36,11 @@ describe("extractArticle", () => {
     expect(extract.markdown).not.toContain("All rights reserved");
   });
 
-  it("drops images", () => {
-    expect(extractArticle(documentFor(articlePage)).markdown).not.toContain("diagram.png");
+  it("drops images and their captions", () => {
+    const markdown = extractArticle(documentFor(articlePage)).markdown;
+
+    expect(markdown).not.toContain("diagram.png");
+    expect(markdown).not.toContain("Diagram of a cache");
   });
 
   it("keeps link text without the address", () => {
