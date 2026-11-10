@@ -1,14 +1,25 @@
 import { captureTab, captureVideo, capturePage } from "./capture/captureTab";
 import type { Capture } from "./capture/Capture";
 import { capturePrompt } from "./capture/formatCapture";
+import { forgetStale, saveCapture } from "./library/library";
+import { fetchAndSave, savedOrFetched } from "./library/libraryCapture";
+import { isFetchMessage, type FetchResult } from "./library/fetchMessage";
+import { captureUrl } from "./capture/captureUrl";
+import { CaptureFailed } from "./capture/captureTab";
+import { cleanUrl, isWebAddress } from "./links/cleanUrl";
+import { ensureOffscreenDocument } from "./offscreen/ensureOffscreenDocument";
+import { fetchPicks, retryPicks } from "./picks/fetchPicks";
+import { isRetryPicksMessage } from "./picks/pickStatus";
+import { addPicks, onPicksChanged } from "./picks/picks";
 import { loadSettings } from "./settings";
-import { findVideoId } from "./youtube/findVideoId";
+import { findVideoId, watchUrl } from "./youtube/findVideoId";
 import { isTestAppVersionMessage, testAppVersion } from "./youtube/testAppVersion";
 
 const MENU = {
   page: "copy-page",
   selection: "copy-selection",
   videoLink: "copy-video-link",
+  pickLink: "pick-link",
 } as const;
 
 const VIDEO_LINK_PATTERNS = [
@@ -30,7 +41,15 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ["link"],
       targetUrlPatterns: VIDEO_LINK_PATTERNS,
     });
+    chrome.contextMenus.create({ id: MENU.pickLink, title: "Add link to Summery picks", contexts: ["link"] });
   });
+
+  forgetStale();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  forgetStale();
+  fetchPicks();
 });
 
 async function captureLinkedVideo(linkUrl: string | undefined, tab: chrome.tabs.Tab | undefined): Promise<Capture> {
@@ -41,8 +60,16 @@ async function captureLinkedVideo(linkUrl: string | undefined, tab: chrome.tabs.
   }
 
   const isWatchingThatVideo = findVideoId(tab?.url) === videoId;
+  const { capture } = await savedOrFetched(watchUrl(videoId), () => captureVideo(videoId, isWatchingThatVideo ? tab?.id : undefined));
 
-  return captureVideo(videoId, isWatchingThatVideo ? tab?.id : undefined);
+  return capture;
+}
+
+async function captureWholeTab(tab: chrome.tabs.Tab): Promise<Capture> {
+  const capture = await captureTab(tab);
+  await saveCapture(capture);
+
+  return capture;
 }
 
 async function captureForMenu(info: chrome.contextMenus.OnClickData, tab: chrome.tabs.Tab | undefined): Promise<Capture> {
@@ -58,19 +85,7 @@ async function captureForMenu(info: chrome.contextMenus.OnClickData, tab: chrome
     return capturePage(tab.id);
   }
 
-  return captureTab(tab);
-}
-
-async function ensureOffscreenDocument(): Promise<void> {
-  if (await chrome.offscreen.hasDocument()) {
-    return;
-  }
-
-  await chrome.offscreen.createDocument({
-    url: "offscreen.html",
-    reasons: [chrome.offscreen.Reason.CLIPBOARD],
-    justification: "Copy the captured text to the clipboard.",
-  });
+  return captureWholeTab(tab);
 }
 
 async function copyText(text: string): Promise<void> {
@@ -89,7 +104,20 @@ async function showResult(badge: string, color: string, title: string): Promise<
   }, 6000);
 }
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+async function pickLink(linkUrl: string | undefined): Promise<void> {
+  if (!linkUrl || !isWebAddress(linkUrl)) {
+    await showResult("!", "#dc2626", "Summery: that link can't be picked.");
+    return;
+  }
+
+  const url = cleanUrl(linkUrl);
+  const kind = findVideoId(url) ? "youtube" : "article";
+
+  await addPicks([{ url, title: url, kind }]);
+  await showResult("+1", "#6d5bd0", "Summery: added to picks");
+}
+
+async function copyForMenu(info: chrome.contextMenus.OnClickData, tab: chrome.tabs.Tab | undefined): Promise<void> {
   await showResult("…", "#6d5bd0", "Summery: capturing…");
 
   try {
@@ -103,9 +131,45 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     await showResult("!", "#dc2626", `Summery: ${message}`);
   }
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === MENU.pickLink) {
+    pickLink(info.linkUrl);
+    return;
+  }
+
+  copyForMenu(info, tab);
 });
 
+onPicksChanged(() => fetchPicks());
+
+chrome.permissions.onAdded.addListener(() => retryPicks());
+
+async function fetchForPopup(url: string, tabId?: number): Promise<FetchResult> {
+  try {
+    await fetchAndSave(() => captureUrl(url, tabId));
+
+    return { isDone: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const needsAppVersion = error instanceof CaptureFailed && error.needsAppVersion;
+
+    return { isDone: false, message, needsAppVersion };
+  }
+}
+
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (isFetchMessage(message)) {
+    fetchForPopup(message.url, message.tabId).then(sendResponse);
+    return true;
+  }
+
+  if (isRetryPicksMessage(message)) {
+    retryPicks().then(() => sendResponse(true));
+    return true;
+  }
+
   if (!isTestAppVersionMessage(message)) {
     return;
   }

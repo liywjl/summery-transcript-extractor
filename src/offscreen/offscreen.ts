@@ -1,13 +1,24 @@
+import { extractArticle } from "../page/extractDocument";
+
 type CopyMessage = {
   target: "offscreen";
   type: "copy";
   text: string;
 };
 
-function isCopyMessage(message: unknown): message is CopyMessage {
-  const candidate = message as Partial<CopyMessage> | undefined;
+type ReadHtmlMessage = {
+  target: "offscreen";
+  type: "read-html";
+  html: string;
+  url: string;
+};
 
-  return candidate?.target === "offscreen" && candidate.type === "copy";
+type OffscreenMessage = CopyMessage | ReadHtmlMessage;
+
+function isOffscreenMessage(message: unknown): message is OffscreenMessage {
+  const candidate = message as Partial<OffscreenMessage> | undefined;
+
+  return candidate?.target === "offscreen";
 }
 
 function copy(text: string): void {
@@ -20,11 +31,28 @@ function copy(text: string): void {
   field.remove();
 }
 
+function documentAt(html: string, url: string): Document {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const base = doc.createElement("base");
+  base.href = url;
+  doc.head.prepend(base);
+
+  return doc;
+}
+
+function handle(message: OffscreenMessage): unknown {
+  if (message.type === "copy") {
+    copy(message.text);
+    return true;
+  }
+
+  return extractArticle(documentAt(message.html, message.url));
+}
+
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!isCopyMessage(message)) {
+  if (!isOffscreenMessage(message)) {
     return;
   }
 
-  copy(message.text);
-  sendResponse(true);
+  sendResponse(handle(message));
 });

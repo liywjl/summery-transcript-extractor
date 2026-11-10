@@ -1,282 +1,243 @@
-import type { Capture } from "../capture/Capture";
-import { CaptureFailed, captureTab } from "../capture/captureTab";
-import { captureMarkdown, capturePrompt, fileName, wordCount } from "../capture/formatCapture";
-import { icon, type IconName } from "../icons";
-import { CHAT_SITES, loadSettings, type Settings } from "../settings";
-import { findVideoId } from "../youtube/findVideoId";
-import { formatClock } from "../youtube/transcript";
-import { previewBlocks, type PreviewBlock } from "./previewBlocks";
+import { CaptureFailed, readPageInTab } from "../capture/captureTab";
+import type { IconName } from "../icons";
+import { askToFetch } from "../library/fetchMessage";
+import { findSaved, isSavable } from "../library/library";
+import { fetchAndSave, fromLibrary, type LibraryCapture } from "../library/libraryCapture";
+import { cleanUrl } from "../links/cleanUrl";
+import type { ListingReading } from "../page/PageReading";
+import { loadIsPicking } from "../picks/picks";
+import { findVideoId, watchUrl } from "../youtube/findVideoId";
+import { captureView } from "./captureView";
+import { iconElement } from "./dom";
+import { listingView } from "./listingView";
+import { pickedView } from "./pickedView";
+import { savedView } from "./savedView";
+import { popupState, startState, watchState } from "./stateStore";
+import { errorView, loadingView } from "./statusViews";
+import type { View } from "./View";
 
-const KINDS: Record<Capture["kind"], { icon: IconName; label: string; loading: string }> = {
-  youtube: { icon: "youtube", label: "YouTube transcript", loading: "Reading captions from YouTube…" },
-  article: { icon: "article", label: "Article", loading: "Reading the page…" },
-  selection: { icon: "selection", label: "Selection", loading: "Reading your selection…" },
+type Tab = "page" | "picked" | "saved";
+
+type PageResult = { shape: "capture"; shown: LibraryCapture } | ListingReading | { shape: "error"; message: string; needsAppVersion: boolean };
+
+type ReadOptions = {
+  isRefresh: boolean;
+  isWholePage: boolean;
 };
 
-const DONE_MS = 1600;
-
-function element<T extends HTMLElement>(id: string): T {
-  return document.getElementById(id) as T;
-}
-
-const view = {
-  root: document.querySelector<HTMLElement>(".popup")!,
-  kind: element("kind"),
-  settings: element<HTMLButtonElement>("settings"),
-  title: element("title"),
-  facts: element("facts"),
-  preview: element("preview"),
-  copyPrompt: element<HTMLButtonElement>("copy-prompt"),
-  copyText: element<HTMLButtonElement>("copy-text"),
-  download: element<HTMLButtonElement>("download"),
-  openChat: element<HTMLButtonElement>("open-chat"),
+const TABS: Record<Tab, { icon: IconName; label: string }> = {
+  page: { icon: "page", label: "This page" },
+  picked: { icon: "picked", label: "Picked" },
+  saved: { icon: "saved", label: "Saved" },
 };
 
-const actionButtons = [view.copyPrompt, view.copyText, view.download, view.openChat];
+const panel = document.getElementById("panel")!;
+const settingsButton = document.getElementById("settings") as HTMLButtonElement;
+const tabButtons = [...document.querySelectorAll<HTMLButtonElement>(".tab")];
 
-function setButtonContent(button: HTMLButtonElement, iconName: IconName, label?: string): void {
-  button.innerHTML = icon(iconName);
+let currentTab: Tab = "page";
+let pageView: View | undefined;
+let stopWatching = () => {};
+let browserTab: chrome.tabs.Tab | undefined;
 
-  if (label) {
-    button.append(label);
+function showTabs(): void {
+  const state = popupState();
+  const counts: Record<Tab, number | undefined> = { page: undefined, picked: state.picks.length, saved: state.saved.length };
+
+  for (const button of tabButtons) {
+    const tab = button.dataset.tab as Tab;
+    const count = counts[tab];
+    const isCurrent = tab === currentTab;
+
+    button.setAttribute("aria-selected", String(isCurrent));
+    button.replaceChildren(iconElement(TABS[tab].icon), TABS[tab].label);
+
+    if (count) {
+      const badge = document.createElement("span");
+      badge.className = "count";
+      badge.textContent = String(count);
+      button.append(badge);
+    }
   }
 }
 
-function showKind(kind: Capture["kind"]): void {
-  view.kind.dataset.kind = kind;
-  view.kind.innerHTML = icon(KINDS[kind].icon);
-  view.kind.append(KINDS[kind].label);
+function mount(view: View, tab: Tab): void {
+  stopWatching();
+  currentTab = tab;
+  panel.replaceChildren(view.element);
+  stopWatching = view.update ? watchState(view.update) : () => {};
+  view.update?.(popupState());
+  showTabs();
 }
 
-function statusLine(iconName: IconName | undefined, text: string): HTMLElement {
-  const line = document.createElement("p");
-  line.className = "status-line";
-
-  if (iconName) {
-    line.innerHTML = icon(iconName);
+function pageLoadingView(tab: chrome.tabs.Tab | undefined): View {
+  if (findVideoId(tab?.url)) {
+    return loadingView("youtube", "youtube", "YouTube transcript", "Reading captions from YouTube…");
   }
 
-  line.append(text);
-
-  return line;
+  return loadingView("article", "article", "Page", "Reading the page…");
 }
 
-function showLoading(kind: Capture["kind"]): void {
-  view.root.dataset.state = "loading";
-  showKind(kind);
+async function fetchInBackground(url: string, tabId?: number): Promise<LibraryCapture> {
+  const result = await askToFetch(url, tabId);
 
-  const status = document.createElement("div");
-  status.className = "status";
-  status.append(statusLine(undefined, KINDS[kind].loading));
-
-  for (let index = 0; index < 8; index++) {
-    const line = document.createElement("span");
-    line.className = "skeleton skeleton-line";
-    status.append(line);
+  if (!result.isDone) {
+    throw new CaptureFailed(result.message, result.needsAppVersion);
   }
 
-  view.preview.replaceChildren(status);
-  actionButtons.forEach((button) => (button.disabled = true));
-}
+  const saved = await findSaved(url);
 
-function fixAppVersionButton(): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "retry fix";
-  setButtonContent(button, "settings", "Update app version");
-  button.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("options.html#youtube") }));
-
-  return button;
-}
-
-function showError(message: string, retry: () => void, needsAppVersion: boolean): void {
-  view.root.dataset.state = "error";
-  view.title.textContent = "Nothing to copy yet";
-  view.facts.textContent = "";
-
-  const status = document.createElement("div");
-  status.className = "status status-error";
-
-  const retryButton = document.createElement("button");
-  retryButton.type = "button";
-  retryButton.className = "retry";
-  setButtonContent(retryButton, "retry", "Try again");
-  retryButton.addEventListener("click", retry);
-
-  const buttons = document.createElement("div");
-  buttons.className = "status-buttons";
-  buttons.append(...(needsAppVersion ? [fixAppVersionButton(), retryButton] : [retryButton]));
-
-  status.append(statusLine("alert", message), buttons);
-  view.preview.replaceChildren(status);
-  actionButtons.forEach((button) => (button.disabled = true));
-}
-
-function tokenEstimate(text: string): string {
-  const tokens = Math.round(text.length / 4);
-
-  if (tokens < 1000) {
-    return `≈${tokens} tokens`;
+  if (!saved) {
+    throw new CaptureFailed("Summery fetched it but couldn't keep a copy. Try again.");
   }
 
-  return `≈${(tokens / 1000).toFixed(1)}k tokens`;
+  return { capture: saved.capture, item: saved.item, isFromLibrary: false };
 }
 
-function sourceFacts(capture: Capture): string[] {
-  if (capture.kind === "youtube") {
-    const length = capture.durationSeconds ? formatClock(capture.durationSeconds) : "";
+async function readVideo(tab: chrome.tabs.Tab, videoId: string, options: ReadOptions): Promise<PageResult> {
+  const url = watchUrl(videoId);
+  const saved = options.isRefresh ? undefined : await fromLibrary(url);
 
-    return [capture.channel, length];
+  return { shape: "capture", shown: saved ?? (await fetchInBackground(url, tab.id)) };
+}
+
+async function readBrowserTab(tab: chrome.tabs.Tab, options: ReadOptions): Promise<PageResult> {
+  const videoId = findVideoId(tab.url);
+
+  if (videoId) {
+    return readVideo(tab, videoId, options);
   }
 
-  return [capture.siteName ?? new URL(capture.url).hostname];
-}
-
-function showFacts(capture: Capture, markdown: string): void {
-  const facts = [...sourceFacts(capture), `${wordCount(markdown).toLocaleString()} words`].filter(Boolean);
-  const tokens = document.createElement("span");
-  tokens.className = "tokens";
-  tokens.textContent = tokenEstimate(markdown);
-
-  view.facts.replaceChildren(`${facts.join(" · ")} · `, tokens);
-}
-
-function blockElement(block: PreviewBlock): HTMLElement {
-  if (block.type === "heading") {
-    const heading = document.createElement(`h${Math.min(block.level + 1, 4)}`);
-    heading.textContent = block.text;
-    return heading;
+  if (tab.id === undefined) {
+    throw new CaptureFailed("There is no page open in this tab.");
   }
 
-  if (block.type === "list") {
-    const list = document.createElement("ul");
-    list.append(...block.items.map((item) => Object.assign(document.createElement("li"), { textContent: item })));
-    return list;
+  const reading = await readPageInTab(tab.id, { isWholePage: options.isWholePage });
+
+  if (reading.shape === "listing") {
+    return reading;
   }
 
-  if (block.type === "code") {
-    const code = document.createElement("pre");
-    code.textContent = block.text;
-    return code;
-  }
-
-  const paragraph = document.createElement("p");
-
-  if (block.timestamp) {
-    const time = document.createElement("span");
-    time.className = "timestamp";
-    time.textContent = block.timestamp;
-    paragraph.append(time);
-  }
-
-  paragraph.append(block.text);
-
-  return paragraph;
+  return { shape: "capture", shown: await fetchAndSave(async () => reading.capture) };
 }
 
-function withoutTitleAndFacts(blocks: PreviewBlock[]): PreviewBlock[] {
-  const hasTitleAndFacts = blocks[0]?.type === "heading" && blocks[1]?.type === "list";
-
-  return hasTitleAndFacts ? blocks.slice(2) : blocks;
-}
-
-function showPreview(markdown: string): void {
-  const blocks = withoutTitleAndFacts(previewBlocks(markdown));
-
-  view.preview.replaceChildren(...blocks.map(blockElement));
-  view.preview.scrollTop = 0;
-}
-
-function flashDone(button: HTMLButtonElement, restore: () => void, doneLabel?: string): void {
-  button.classList.add("is-done");
-  setButtonContent(button, "check", doneLabel);
-
-  setTimeout(() => {
-    button.classList.remove("is-done");
-    restore();
-  }, DONE_MS);
-}
-
-function downloadMarkdown(name: string, markdown: string): void {
-  const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown" }));
-  const link = Object.assign(document.createElement("a"), { href: url, download: name });
-
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function restoreActions(chatName: string): void {
-  setButtonContent(view.copyPrompt, "copy", "Copy prompt");
-  setButtonContent(view.copyText, "fileText");
-  setButtonContent(view.download, "download");
-  setButtonContent(view.openChat, "externalLink");
-
-  view.openChat.title = `Copy and open ${chatName}`;
-  view.openChat.setAttribute("aria-label", `Copy and open ${chatName}`);
-}
-
-function bindActions(capture: Capture, settings: Settings): void {
-  const markdown = captureMarkdown(capture, settings);
-  const prompt = capturePrompt(capture, settings.promptTemplate, settings);
-  const chat = CHAT_SITES[settings.chatSite];
-
-  restoreActions(chat.name);
-
-  view.copyPrompt.onclick = async () => {
-    await navigator.clipboard.writeText(prompt);
-    flashDone(view.copyPrompt, () => setButtonContent(view.copyPrompt, "copy", "Copy prompt"), "Copied prompt");
-  };
-
-  view.copyText.onclick = async () => {
-    await navigator.clipboard.writeText(markdown);
-    flashDone(view.copyText, () => setButtonContent(view.copyText, "fileText"));
-  };
-
-  view.download.onclick = () => {
-    downloadMarkdown(fileName(capture), markdown);
-    flashDone(view.download, () => setButtonContent(view.download, "download"));
-  };
-
-  view.openChat.onclick = async () => {
-    await navigator.clipboard.writeText(prompt);
-    await chrome.tabs.create({ url: chat.url });
-  };
-
-  actionButtons.forEach((button) => (button.disabled = false));
-}
-
-function showCapture(capture: Capture, settings: Settings): void {
-  const markdown = captureMarkdown(capture, settings);
-
-  view.root.dataset.state = "ready";
-  showKind(capture.kind);
-  view.title.textContent = capture.title;
-  showFacts(capture, markdown);
-  showPreview(markdown);
-  bindActions(capture, settings);
-}
-
-async function activeTab(): Promise<chrome.tabs.Tab> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  return tab;
-}
-
-async function run(): Promise<void> {
-  const [settings, tab] = await Promise.all([loadSettings(), activeTab()]);
-
-  showLoading(findVideoId(tab?.url) ? "youtube" : "article");
-
+async function pageResult(options: ReadOptions): Promise<PageResult> {
   try {
-    showCapture(await captureTab(tab), settings);
+    return await readBrowserTab(browserTab!, options);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     const needsAppVersion = error instanceof CaptureFailed && error.needsAppVersion;
 
-    showError(error instanceof Error ? error.message : String(error), run, needsAppVersion);
+    return { shape: "error", message, needsAppVersion };
   }
 }
 
-view.settings.innerHTML = icon("settings");
-view.settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
-restoreActions(CHAT_SITES.claude.name);
-run();
+function openAppVersionSettings(): void {
+  chrome.tabs.create({ url: chrome.runtime.getURL("options.html#youtube") });
+}
+
+async function viewForPage(result: PageResult, options: ReadOptions): Promise<View> {
+  const state = popupState();
+
+  if (result.shape === "capture") {
+    return captureView({ shown: result.shown, state, onRefresh: () => showPage({ ...options, isRefresh: true }) });
+  }
+
+  if (result.shape === "listing") {
+    return listingView({
+      reading: result,
+      state,
+      isPickingOnYouTube: await loadIsPicking(),
+      onShowPicked: () => showTab("picked"),
+      onReadWholePage: () => showPage({ isRefresh: false, isWholePage: true }),
+    });
+  }
+
+  const retry = { iconName: "retry" as const, label: "Try again", onClick: () => showPage(options) };
+  const fixVersion = { iconName: "settings" as const, label: "Update app version", isPrimary: true, onClick: openAppVersionSettings };
+
+  return errorView(result.message, result.needsAppVersion ? [fixVersion, retry] : [retry]);
+}
+
+async function showPage(options: ReadOptions): Promise<void> {
+  pageView = pageLoadingView(browserTab);
+  mount(pageView, "page");
+
+  const view = await viewForPage(await pageResult(options), options);
+  pageView = view;
+
+  if (currentTab === "page") {
+    mount(view, "page");
+  }
+}
+
+function isShowingInTab(url: string): boolean {
+  const tabUrl = browserTab?.url;
+
+  return Boolean(tabUrl) && cleanUrl(tabUrl!) === url;
+}
+
+async function refetchDetail(url: string, backTo: Tab): Promise<void> {
+  if (isShowingInTab(url)) {
+    await showPage({ isRefresh: true, isWholePage: true });
+    return;
+  }
+
+  mount(loadingView("saved", "saved", "Saved", "Fetching it again…"), backTo);
+
+  const result = await askToFetch(url);
+
+  if (!result.isDone) {
+    mount(errorView(result.message, [{ iconName: "retry", label: "Try again", onClick: () => refetchDetail(url, backTo) }]), backTo);
+    return;
+  }
+
+  await showDetail(url, backTo);
+}
+
+async function showDetail(url: string, backTo: Tab): Promise<void> {
+  const saved = await findSaved(url);
+
+  if (!saved) {
+    showTab(backTo);
+    return;
+  }
+
+  const shown = { capture: saved.capture, item: saved.item, isFromLibrary: true };
+  const view = captureView({
+    shown,
+    state: popupState(),
+    onRefresh: isSavable(saved.capture) ? () => refetchDetail(url, backTo) : undefined,
+    onClose: () => showTab(backTo),
+  });
+
+  mount(view, backTo);
+}
+
+function showTab(tab: Tab): void {
+  if (tab === "page") {
+    mount(pageView ?? pageLoadingView(browserTab), "page");
+    return;
+  }
+
+  if (tab === "picked") {
+    mount(pickedView({ state: popupState(), onOpen: (url) => showDetail(url, "picked") }), "picked");
+    return;
+  }
+
+  mount(savedView({ state: popupState(), onOpen: (url) => showDetail(url, "saved") }), "saved");
+}
+
+async function start(): Promise<void> {
+  const [, [tab]] = await Promise.all([startState(), chrome.tabs.query({ active: true, currentWindow: true })]);
+  browserTab = tab;
+
+  settingsButton.append(iconElement("settings"));
+  settingsButton.addEventListener("click", () => chrome.runtime.openOptionsPage());
+  tabButtons.forEach((button) => button.addEventListener("click", () => showTab(button.dataset.tab as Tab)));
+  watchState(showTabs);
+
+  await showPage({ isRefresh: false, isWholePage: false });
+}
+
+start();

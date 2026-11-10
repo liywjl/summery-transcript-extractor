@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PageCapture, YouTubeCapture } from "./Capture";
-import { captureMarkdown, capturePrompt, fileName, wordCount } from "./formatCapture";
+import { captureMarkdown, capturePrompt, capturesFileName, capturesPrompt, fileName, wordCount } from "./formatCapture";
 
 const talk: YouTubeCapture = {
   kind: "youtube",
@@ -71,6 +71,38 @@ describe("capturePrompt", () => {
 
   it("leaves unknown placeholders as written", () => {
     expect(capturePrompt(article, "{{nope}}", { includeTimestamps: false })).toBe("{{nope}}");
+  });
+});
+
+describe("capturesPrompt", () => {
+  it("names a set of videos", () => {
+    expect(capturesPrompt([talk, talk], "Here is {{source}}.", { includeTimestamps: false })).toBe("Here is a set of 2 YouTube transcripts.");
+  });
+
+  it("names a mix of videos and articles", () => {
+    expect(capturesPrompt([talk, article, article], "Here is {{source}}.", { includeTimestamps: false })).toBe(
+      "Here is a set of 3 documents: 1 YouTube transcript and 2 articles.",
+    );
+  });
+
+  it("puts every document in the content, divided by rules", () => {
+    const options = { includeTimestamps: false };
+
+    expect(capturesPrompt([talk, article], "{{content}}", options)).toBe(
+      `${captureMarkdown(talk, options)}\n\n---\n\n${captureMarkdown(article, options)}`,
+    );
+  });
+
+  it("reads like a single capture when there is only one", () => {
+    const options = { includeTimestamps: true };
+
+    expect(capturesPrompt([article], "{{source}} {{content}}", options)).toBe(capturePrompt(article, "{{source}} {{content}}", options));
+  });
+});
+
+describe("capturesFileName", () => {
+  it("names a combined file after how many sources it holds", () => {
+    expect(capturesFileName([talk, article])).toBe("summery-2-sources.md");
   });
 });
 

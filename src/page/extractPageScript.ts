@@ -1,4 +1,6 @@
-import { extractArticle, extractSelection, hasMeaningfulSelection, type PageExtract } from "./extractDocument";
+import { hasMeaningfulSelection } from "./extractDocument";
+import type { PageReading } from "./PageReading";
+import { readPage, type ReadOptions } from "./readPage";
 
 function selectionHtml(selection: Selection): string {
   const container = document.createElement("div");
@@ -10,14 +12,18 @@ function selectionHtml(selection: Selection): string {
   return container.innerHTML;
 }
 
-function extractPage(): PageExtract {
+function meaningfulSelectionHtml(): string | undefined {
   const selection = window.getSelection();
 
-  if (selection && hasMeaningfulSelection(selection.toString())) {
-    return extractSelection(document, selectionHtml(selection));
+  if (!selection || !hasMeaningfulSelection(selection.toString())) {
+    return undefined;
   }
 
-  return extractArticle(document);
+  return selectionHtml(selection);
 }
 
-Object.assign(globalThis, { summeryExtractPage: extractPage });
+function readThisPage(options: ReadOptions): PageReading {
+  return readPage(document, meaningfulSelectionHtml(), options);
+}
+
+Object.assign(globalThis, { summeryReadPage: readThisPage });

@@ -1,0 +1,77 @@
+.summery-pick-box {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 8px;
+  background: rgba(21, 19, 31, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  color: transparent;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.summery-pick-box:hover {
+  background: rgba(21, 19, 31, 0.85);
+  transform: scale(1.06);
+}
+
+.summery-pick-box[data-picked="true"] {
+  border-color: #ff9159;
+  background: #ff9159;
+  color: #24130a;
+}
+
+.summery-pick-box svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 3;
+}
+
+.summery-pick-tray {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 6px 0 16px;
+  border-radius: 999px;
+  background: #ff9159;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color: #24130a;
+  font: 600 14px/1 Roboto, system-ui, sans-serif;
+  transform: translateX(-50%);
+}
+
+.summery-pick-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(36, 19, 10, 0.12);
+  color: inherit;
+  cursor: pointer;
+}
+
+.summery-pick-stop:hover {
+  background: rgba(36, 19, 10, 0.24);
+}
+
+.summery-pick-stop svg {
+  width: 16px;
+  height: 16px;
+}

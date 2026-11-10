@@ -1,3 +1,4 @@
+import { startLibrarySetting } from "./librarySetting";
 import { startYouTubeVersionSetting } from "./youtubeVersionSetting";
 import { CHAT_SITES, DEFAULT_PROMPT_TEMPLATE, loadSettings, saveSettings, type ChatSite, type Settings } from "../settings";
 
@@ -41,4 +42,5 @@ async function start(): Promise<void> {
 }
 
 start();
+startLibrarySetting();
 startYouTubeVersionSetting();
