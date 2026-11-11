@@ -2,6 +2,8 @@
 
 # Summery
 
+*Summaries, with a summery disposition.*
+
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
 <a href="https://buymeacoffee.com/willlacf"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support%20this%20project-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy Me A Coffee" /></a>
 
